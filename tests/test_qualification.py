@@ -1,0 +1,69 @@
+from app.models import DealType, Lead, PropertyType, Temperature
+from app.services.qualification import (
+    apply_classification,
+    apply_profile_updates,
+    heuristic_classification,
+)
+
+
+def test_apply_profile_updates_sets_valid_enum_fields():
+    lead = Lead(telegram_user_id=1)
+    apply_profile_updates(
+        lead,
+        {
+            "deal_type": "buy",
+            "property_type": "apartment",
+            "city": "Київ",
+            "rooms": 2,
+            "budget_max": 90000,
+            "phone": "+380501234567",
+        },
+    )
+    assert lead.deal_type == DealType.BUY
+    assert lead.property_type == PropertyType.APARTMENT
+    assert lead.city == "Київ"
+    assert lead.rooms == 2
+    assert lead.budget_max == 90000
+    assert lead.phone == "+380501234567"
+
+
+def test_apply_profile_updates_ignores_invalid_enum_value():
+    lead = Lead(telegram_user_id=1)
+    apply_profile_updates(lead, {"deal_type": "not-a-real-type"})
+    assert lead.deal_type is None
+
+
+def test_lead_missing_required_fields():
+    lead = Lead(telegram_user_id=1)
+    assert "city" in lead.missing_required_fields()
+    assert not lead.is_qualified()
+
+    apply_profile_updates(
+        lead,
+        {
+            "deal_type": "buy",
+            "city": "Київ",
+            "property_type": "apartment",
+            "rooms": 2,
+            "budget_max": 90000,
+            "phone": "+380501234567",
+        },
+    )
+    assert lead.is_qualified()
+
+
+def test_apply_classification_sets_temperature_and_urgency():
+    lead = Lead(telegram_user_id=1)
+    apply_classification(lead, {"temperature": "hot", "urgency": "цього тижня"})
+    assert lead.temperature == Temperature.HOT
+    assert lead.urgency == "цього тижня"
+
+
+def test_heuristic_classification_warm_when_phone_and_budget_present():
+    lead = Lead(telegram_user_id=1, phone="+380501234567", budget_max=90000)
+    assert heuristic_classification(lead) == Temperature.WARM
+
+
+def test_heuristic_classification_cold_without_contact_info():
+    lead = Lead(telegram_user_id=1)
+    assert heuristic_classification(lead) == Temperature.COLD
