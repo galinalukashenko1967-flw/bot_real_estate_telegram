@@ -31,3 +31,24 @@ def test_heuristic_reply_asks_for_missing_field():
     result = heuristic_reply([], "Хочу купити квартиру")
     assert result.profile_updates["deal_type"] == "buy"
     assert "місто" in result.reply_text.lower() or "київ" in result.reply_text.lower()
+
+
+def test_heuristic_reply_understands_bare_number_answering_rooms_question():
+    # Regression: a bare "2" in reply to "Скільки кімнат потрібно?" used to be
+    # silently dropped, so the bot re-asked the same question forever.
+    history = [{"role": "assistant", "content": "Скільки кімнат потрібно?"}]
+    result = heuristic_reply(history, "2")
+    assert result.profile_updates["rooms"] == 2
+    assert "кімнат" not in result.reply_text.lower()
+
+
+def test_heuristic_reply_understands_bare_number_answering_budget_question():
+    history = [{"role": "assistant", "content": "Який орієнтовний бюджет?"}]
+    result = heuristic_reply(history, "90000")
+    assert result.profile_updates["budget_max"] == 90000
+
+
+def test_heuristic_reply_ignores_bare_number_with_no_pending_question():
+    result = heuristic_reply([], "2")
+    assert "rooms" not in result.profile_updates
+    assert "budget_max" not in result.profile_updates

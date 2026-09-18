@@ -105,10 +105,41 @@ def classify(fields: dict[str, Any], text: str) -> dict[str, Any] | None:
     }
 
 
+_BARE_NUMBER_RE = re.compile(r"^\s*(\d+)\s*\+?\s*$")
+
+
+def _pending_field(conversation_history: list[dict[str, Any]]) -> str | None:
+    """Which field the bot's last message asked about, so a bare reply like
+    '2' can be understood as answering that specific question instead of
+    being silently dropped (and the same question re-asked forever)."""
+
+    for msg in reversed(conversation_history):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, str):
+            continue
+        for key, question in _QUESTIONS_ORDER:
+            if question in content:
+                return key
+        return None
+    return None
+
+
 def heuristic_reply(
     conversation_history: list[dict[str, Any]], user_message: str
 ) -> DialogueResult:
     fields = extract_fields(user_message)
+
+    if not fields:
+        bare_number = _BARE_NUMBER_RE.match(user_message)
+        if bare_number:
+            pending = _pending_field(conversation_history)
+            if pending == "rooms":
+                fields["rooms"] = int(bare_number.group(1))
+            elif pending == "budget_max":
+                fields["budget_max"] = int(bare_number.group(1))
+
     classification = classify(fields, user_message)
 
     known = dict(fields)
