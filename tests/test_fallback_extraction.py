@@ -55,6 +55,21 @@ def test_heuristic_reply_ignores_bare_number_with_no_pending_question():
     assert "budget_max" not in result.profile_updates
 
 
+def test_heuristic_reply_remembers_a_historical_bare_number_answer():
+    # Regression: a bare "2" answering the rooms question several turns ago
+    # used to be forgotten on later turns (the re-scan of history couldn't
+    # tell it was answering "rooms" without knowing what was asked at the
+    # time), so the bot re-asked "Скільки кімнат потрібно?" after every
+    # subsequent answer instead of moving on.
+    history = [
+        {"role": "assistant", "content": "Скільки кімнат потрібно?"},
+        {"role": "user", "content": "2"},
+        {"role": "assistant", "content": "Залиште, будь ласка, номер телефону для зв'язку."},
+    ]
+    result = heuristic_reply(history, "0501234567")
+    assert "кімнат" not in result.reply_text.lower()
+
+
 def test_heuristic_reply_does_not_misread_its_own_greeting_as_an_answer():
     # Regression: the greeting itself asks "купівля, оренда чи продаж?",
     # which used to be re-scanned as if the client had said it, making the

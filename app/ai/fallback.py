@@ -108,54 +108,53 @@ def classify(fields: dict[str, Any], text: str) -> dict[str, Any] | None:
 _BARE_NUMBER_RE = re.compile(r"^\s*(\d+)\s*\+?\s*$")
 
 
-def _pending_field(conversation_history: list[dict[str, Any]]) -> str | None:
-    """Which field the bot's last message asked about, so a bare reply like
-    '2' can be understood as answering that specific question instead of
-    being silently dropped (and the same question re-asked forever)."""
-
-    for msg in reversed(conversation_history):
-        if msg.get("role") != "assistant":
-            continue
-        content = msg.get("content")
-        if not isinstance(content, str):
-            continue
-        for key, question in _QUESTIONS_ORDER:
-            if question in content:
-                return key
-        return None
+def _field_asked_by(question_text: str) -> str | None:
+    for key, question in _QUESTIONS_ORDER:
+        if question in question_text:
+            return key
     return None
+
+
+def _extract_with_pending(text: str, pending_field: str | None) -> dict[str, Any]:
+    """Like extract_fields(), but also resolves a bare numeric reply (e.g.
+    '2') using whichever field the previous question was actually asking
+    about — a bare number carries no field name of its own, so without this
+    context it's silently dropped and the same question gets re-asked."""
+
+    fields = extract_fields(text)
+    if not fields:
+        bare_number = _BARE_NUMBER_RE.match(text)
+        if bare_number and pending_field in ("rooms", "budget_max"):
+            fields[pending_field] = int(bare_number.group(1))
+    return fields
 
 
 def heuristic_reply(
     conversation_history: list[dict[str, Any]], user_message: str
 ) -> DialogueResult:
-    fields = extract_fields(user_message)
-
-    if not fields:
-        bare_number = _BARE_NUMBER_RE.match(user_message)
-        if bare_number:
-            pending = _pending_field(conversation_history)
-            if pending == "rooms":
-                fields["rooms"] = int(bare_number.group(1))
-            elif pending == "budget_max":
-                fields["budget_max"] = int(bare_number.group(1))
-
-    classification = classify(fields, user_message)
-
-    known = dict(fields)
+    # Replay the whole conversation chronologically, tracking which field
+    # each bot question was asking about, so a bare-number answer anywhere
+    # in the history (not just the current turn) resolves to the right
+    # field instead of being lost on every subsequent turn.
+    known: dict[str, Any] = {}
+    pending_field: str | None = None
     for msg in conversation_history:
-        if msg.get("role") != "user":
-            # Only scan the client's own messages: the bot's own questions
-            # ("купівля, оренда чи продаж?") contain the same trigger words
-            # as real answers and would otherwise be misread as one.
-            continue
         content = msg.get("content")
-        if isinstance(content, str):
-            known.update({k: v for k, v in extract_fields(content).items() if k not in known})
+        if not isinstance(content, str):
+            continue
+        if msg.get("role") == "assistant":
+            pending_field = _field_asked_by(content)
+        elif msg.get("role") == "user":
+            for key, value in _extract_with_pending(content, pending_field).items():
+                known.setdefault(key, value)
+
+    fields = _extract_with_pending(user_message, pending_field)
+    classification = classify(fields, user_message)
+    known.update(fields)
 
     next_question = None
     for key, question in _QUESTIONS_ORDER:
-        if key not in known and key not in fields:
+        if key not in known:
             next_question = question
             break
 
