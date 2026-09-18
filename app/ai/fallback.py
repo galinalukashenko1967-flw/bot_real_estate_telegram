@@ -144,6 +144,11 @@ def heuristic_reply(
 
     known = dict(fields)
     for msg in conversation_history:
+        if msg.get("role") != "user":
+            # Only scan the client's own messages: the bot's own questions
+            # ("купівля, оренда чи продаж?") contain the same trigger words
+            # as real answers and would otherwise be misread as one.
+            continue
         content = msg.get("content")
         if isinstance(content, str):
             known.update({k: v for k, v in extract_fields(content).items() if k not in known})

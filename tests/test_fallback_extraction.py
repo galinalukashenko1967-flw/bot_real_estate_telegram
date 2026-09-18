@@ -1,4 +1,5 @@
 from app.ai.fallback import classify, extract_fields, heuristic_reply
+from app.ai.prompts import GREETING_MESSAGE
 
 
 def test_extract_deal_type_and_city():
@@ -52,3 +53,15 @@ def test_heuristic_reply_ignores_bare_number_with_no_pending_question():
     result = heuristic_reply([], "2")
     assert "rooms" not in result.profile_updates
     assert "budget_max" not in result.profile_updates
+
+
+def test_heuristic_reply_does_not_misread_its_own_greeting_as_an_answer():
+    # Regression: the greeting itself asks "купівля, оренда чи продаж?",
+    # which used to be re-scanned as if the client had said it, making the
+    # bot think deal_type (and everything else) was already known after a
+    # single real answer, and jump straight to "Зараз підберу варіанти".
+    history = [{"role": "assistant", "content": GREETING_MESSAGE}]
+    result = heuristic_reply(history, "купівля")
+    assert result.profile_updates["deal_type"] == "buy"
+    assert "міст" in result.reply_text.lower()
+    assert "зараз підберу" not in result.reply_text.lower()
