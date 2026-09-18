@@ -7,17 +7,16 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from app.ai.prompts import GREETING_MESSAGE, UNSUPPORTED_CITY_NOTE
-from app.bot.formatting import (
-    format_lead_summary_for_realtor,
-    format_property_card,
-    format_reaction_confirmation,
+from app.bot.formatting import format_reaction_confirmation
+from app.bot.keyboards import (
+    deal_type_menu_keyboard,
+    parse_reaction_callback,
 )
-from app.bot.keyboards import parse_reaction_callback, property_reaction_keyboard
 from app.bot.notifications import notify_realtor
+from app.bot.search_flow import present_search_results
 from app.config import get_settings
 from app.db import async_session_factory
 from app.models import Property
-from app.search.hybrid import hybrid_search
 from app.services.leads import get_or_create_lead, handle_incoming_message, record_reaction
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ async def cmd_start(message: Message) -> None:
             lead.conversation_history = [{"role": "assistant", "content": GREETING_MESSAGE}]
         await session.commit()
 
-    await message.answer(GREETING_MESSAGE)
+    await message.answer(GREETING_MESSAGE, reply_markup=deal_type_menu_keyboard())
 
 
 @router.message(F.text & ~F.text.startswith("/"))
@@ -62,24 +61,7 @@ async def handle_text(message: Message, bot: Bot) -> None:
         should_search = lead.is_qualified() and not was_qualified
 
         if should_search:
-            properties = await hybrid_search(session, lead)
-            await session.commit()
-
-            if not properties:
-                await message.answer(
-                    "На жаль, зараз немає варіантів під ваш запит. Рієлтор зв'яжеться "
-                    "з вами, щойно з'явиться щось відповідне."
-                )
-            else:
-                await message.answer(f"Знайшов {len(properties)} варіант(и) під ваш запит:")
-                for prop in properties:
-                    await message.answer(
-                        format_property_card(prop),
-                        reply_markup=property_reaction_keyboard(prop),
-                        parse_mode="HTML",
-                        disable_web_page_preview=False,
-                    )
-            await notify_realtor(bot, format_lead_summary_for_realtor(lead))
+            await present_search_results(message, session, lead, bot)
         else:
             await session.commit()
 

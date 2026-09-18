@@ -8,6 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.bot.handlers import router
+from app.bot.menu_handlers import router as menu_router
 from app.config import get_settings
 from app.db import init_db
 
@@ -29,6 +30,7 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dispatcher = Dispatcher()
+    dispatcher.include_router(menu_router)
     dispatcher.include_router(router)
 
     logger.info("AI-рієлтор бот запущено, use_ai=%s", bool(settings.anthropic_api_key))
