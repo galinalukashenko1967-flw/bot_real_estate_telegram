@@ -1,4 +1,5 @@
-from app.models import DealType, Lead, PropertyType, Temperature
+from app.models import DealType, Lead, LeadStatus, PropertyType, Temperature
+from app.services.leads import reset_lead_for_new_conversation
 from app.services.qualification import (
     apply_classification,
     apply_profile_updates,
@@ -31,6 +32,38 @@ def test_apply_profile_updates_ignores_invalid_enum_value():
     lead = Lead(telegram_user_id=1)
     apply_profile_updates(lead, {"deal_type": "not-a-real-type"})
     assert lead.deal_type is None
+
+
+def test_reset_lead_for_new_conversation_clears_a_fully_qualified_profile():
+    lead = Lead(telegram_user_id=1, status=LeadStatus.OFFERS_SENT)
+    apply_profile_updates(
+        lead,
+        {
+            "deal_type": "buy",
+            "property_type": "apartment",
+            "city": "Київ",
+            "rooms": 2,
+            "budget_max": 90000,
+            "phone": "+380501234567",
+        },
+    )
+    lead.temperature = Temperature.HOT
+    lead.conversation_history = [{"role": "user", "content": "2 кімнати"}]
+    assert lead.is_qualified()
+
+    reset_lead_for_new_conversation(lead)
+
+    assert lead.missing_required_fields() == [
+        "deal_type",
+        "city",
+        "property_type",
+        "rooms",
+        "budget_max",
+        "phone",
+    ]
+    assert lead.status == LeadStatus.NEW
+    assert lead.temperature is None
+    assert lead.conversation_history == []
 
 
 def test_lead_missing_required_fields():

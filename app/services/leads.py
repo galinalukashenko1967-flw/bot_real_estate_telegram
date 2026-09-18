@@ -42,6 +42,27 @@ async def get_or_create_lead(
     return lead
 
 
+def reset_lead_for_new_conversation(lead: Lead) -> None:
+    """Clear a lead's qualification profile so /start always begins a fresh
+    guided flow, instead of an already-qualified lead (from earlier testing
+    or a past search) jumping straight to search results on the first menu
+    click."""
+
+    lead.deal_type = None
+    lead.city = None
+    lead.district = None
+    lead.property_type = None
+    lead.rooms = None
+    lead.budget_min = None
+    lead.budget_max = None
+    lead.budget_currency = "USD"
+    lead.phone = None
+    lead.temperature = None
+    lead.urgency = None
+    lead.status = LeadStatus.NEW
+    lead.conversation_history = []
+
+
 async def handle_incoming_message(session: AsyncSession, lead: Lead, text: str) -> DialogueResult:
     """Run one AI dialogue turn for the lead, persist extracted profile data,
     classification and conversation history."""

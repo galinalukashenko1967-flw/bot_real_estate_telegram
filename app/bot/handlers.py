@@ -17,7 +17,12 @@ from app.bot.search_flow import present_search_results
 from app.config import get_settings
 from app.db import async_session_factory
 from app.models import Property
-from app.services.leads import get_or_create_lead, handle_incoming_message, record_reaction
+from app.services.leads import (
+    get_or_create_lead,
+    handle_incoming_message,
+    record_reaction,
+    reset_lead_for_new_conversation,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="lead_dialogue")
@@ -32,8 +37,8 @@ async def cmd_start(message: Message) -> None:
             telegram_username=message.from_user.username,
             full_name=message.from_user.full_name,
         )
-        if not lead.conversation_history:
-            lead.conversation_history = [{"role": "assistant", "content": GREETING_MESSAGE}]
+        reset_lead_for_new_conversation(lead)
+        lead.conversation_history = [{"role": "assistant", "content": GREETING_MESSAGE}]
         await session.commit()
 
     await message.answer(GREETING_MESSAGE, reply_markup=deal_type_menu_keyboard())
