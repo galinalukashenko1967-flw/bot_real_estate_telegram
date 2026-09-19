@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +26,19 @@ class Settings(BaseSettings):
     rieltor_ua_allowed_cities: str = "Київ,Львів"
     rieltor_ua_base_url: str = "https://rieltor.ua"
     rieltor_ua_request_timeout: int = 10
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        """Managed Postgres providers (Railway included) hand out a plain
+        `postgres://`/`postgresql://` URL — SQLAlchemy's async engine needs
+        the `+asyncpg` driver spelled out explicitly."""
+
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value[len("postgres://") :]
+        if value.startswith("postgresql://") and "+asyncpg" not in value:
+            return "postgresql+asyncpg://" + value[len("postgresql://") :]
+        return value
 
     @property
     def rieltor_ua_allowed_cities_list(self) -> list[str]:
